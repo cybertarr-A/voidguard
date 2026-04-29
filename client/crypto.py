@@ -11,7 +11,7 @@ class CryptoModule:
             self._aesgcm = AESGCM(self._key)
         except Exception as e:
             print(f"Failed to initialize CryptoModule: {e}")
-            raise e
+            raise
 
     def encrypt(self, plaintext: str) -> str:
         nonce = os.urandom(12)

@@ -1,4 +1,3 @@
-import json
 import uuid
 import sys
 import os
@@ -35,8 +34,9 @@ class MemoryAgent:
             )
             
             # If distance is small (meaning highly similar to past attack)
-            if results['distances'] and len(results['distances'][0]) > 0:
-                dist = results['distances'][0][0]
+            distances = results.get("distances") or []
+            if distances and distances[0]:
+                dist = distances[0][0]
                 if dist < 0.3: # Close match
                     risk_score += 65.0
                 elif dist < 0.5: # Partial match

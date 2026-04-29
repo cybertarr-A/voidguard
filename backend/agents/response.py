@@ -24,8 +24,6 @@ class ResponseAgent:
             block_key = f"block:ip:{telemetry.ip_address}"
             await redis.setex(block_key, 86400, "malicious_activity")
             print(f"[Response] Blocked IP {telemetry.ip_address} for 24h")
-        elif action == "ALERT":
-            pass # just log
             
         # Log to PostgreSQL
         try:

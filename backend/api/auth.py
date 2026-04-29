@@ -5,16 +5,27 @@ import sys
 import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from core.security import verify_password, get_password_hash, create_access_token
-from models.schemas import Token, LoginRequest
+from config import settings
+from core.security import (
+    create_access_token,
+    decode_access_token,
+    get_password_hash,
+    verify_password,
+)
+from models.schemas import Token
 
 router = APIRouter()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
-# Hardcoded for demo/simplicity. In production, check DB.
-ADMIN_USER = "admin"
-ADMIN_HASH = get_password_hash("admin") # Use env vars in real app
+ADMIN_USER = settings.ADMIN_USERNAME
+ADMIN_HASH = get_password_hash(settings.ADMIN_PASSWORD)
+
+credentials_exception = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Could not validate credentials",
+    headers={"WWW-Authenticate": "Bearer"},
+)
 
 @router.post("/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
@@ -30,3 +41,9 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
         detail="Incorrect username or password",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
+    subject = decode_access_token(token)
+    if not subject:
+        raise credentials_exception
+    return subject

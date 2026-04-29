@@ -1,271 +1,231 @@
 # VOIDGUARD
 
-VOIDGUARD is a prototype autonomous security monitoring platform. It contains a simulated telemetry client, a FastAPI detection backend, a multi-agent risk scoring pipeline, PostgreSQL alert storage, Redis-based rate limiting and blocklisting, ChromaDB-backed threat memory, and a Next.js dashboard shell.
+VOIDGUARD is a local autonomous security-monitoring prototype. It simulates encrypted telemetry from a client agent, ingests it through a FastAPI backend, scores requests with a multi-agent detection pipeline, records decisions in PostgreSQL, keeps block/rate-limit state in Redis, stores threat memory in ChromaDB, and displays results in a Next.js dashboard.
 
-The project is designed as a local demo and development foundation for an AI-assisted cyber-defense system. It is not production-hardened yet, but the main components and data flow are already in place.
+It is built for safe local testing. The included threat smoke test sends synthetic malicious-looking telemetry into VOIDGUARD itself; it does not attack any external target.
 
-## What This Project Does
+## What Works
 
-VOIDGUARD simulates security telemetry from an agent, encrypts that telemetry, sends it to a backend, analyzes the request for suspicious behavior, and records the resulting action.
+- Encrypted telemetry ingest with AES-256-GCM
+- FastAPI backend with health, auth, ingest, and alert APIs
+- Redis rate limiting and temporary IP blocklist
+- PostgreSQL alert persistence
+- ChromaDB-backed threat-pattern memory
+- Rule-based, OAuth-token, anomaly, and memory scoring
+- Next.js dashboard with login, health status, summary cards, and alert table
+- Repeatable smoke test that proves a synthetic threat is detected and blocked
 
-At a high level:
+## Architecture
 
 ```text
-Python client agent
-  -> generates simulated traffic
-  -> encrypts telemetry with AES-256-GCM
-  -> posts encrypted payloads to FastAPI
+client/
+  simulated telemetry
+  AES-GCM encryption
+  POST /api/v1/ingest/
 
-FastAPI backend
-  -> rate-limits agents with Redis
-  -> decrypts and validates telemetry
-  -> scores traffic with multiple analysis agents
-  -> stores alerts in PostgreSQL
-  -> stores block decisions in Redis
-  -> stores attack patterns in ChromaDB
+backend/
+  FastAPI API
+  SentinelAgent -> decrypts and validates telemetry
+  AnalystAgent  -> rule checks + Isolation Forest anomaly scoring
+  OAuthAgent    -> auth-token behavior scoring
+  MemoryAgent   -> ChromaDB similarity scoring
+  DecisionEngine -> ALLOW / ALERT / BLOCK
+  ResponseAgent -> PostgreSQL alert + Redis blocklist + Redis stream
 
-Next.js dashboard
-  -> intended frontend for viewing alerts and system state
+dashboard/
+  Next.js UI
+  backend health check
+  admin login
+  alerts table
+
+infra/
+  PostgreSQL
+  Redis
+  ChromaDB
 ```
 
 ## Repository Layout
 
 ```text
 .
-├── backend/              FastAPI API and detection pipeline
-│   ├── agents/           Detection, memory, decision, and response agents
-│   ├── api/              HTTP route modules
-│   ├── core/             Database, Redis, security, and ChromaDB clients
-│   ├── models/           SQLAlchemy and Pydantic models
-│   ├── main.py           FastAPI app entry point
-│   └── requirements.txt  Python backend dependencies
-├── client/               Simulated telemetry sender
-│   ├── agent.py          Client loop that sends encrypted payloads
-│   ├── collector.py      Simulated traffic and system metric generator
-│   ├── crypto.py         AES-GCM encryption helper
-│   └── requirements.txt  Python client dependencies
-├── dashboard/            Next.js frontend app
-│   ├── src/app/          App router pages and styles
-│   ├── Dockerfile        Production dashboard container
-│   └── package.json      Frontend scripts and dependencies
-├── docker-compose.yml    Full local stack orchestration
-├── .env.example          Example runtime configuration
-└── README.md             Project documentation
+├── backend/
+│   ├── agents/                 Detection and response agents
+│   ├── api/                    FastAPI route modules
+│   ├── core/                   DB, Redis, ChromaDB, and crypto helpers
+│   ├── models/                 SQLAlchemy and Pydantic models
+│   ├── scripts/
+│   │   └── threat_smoke_test.py
+│   ├── main.py
+│   └── requirements.txt
+├── client/
+│   ├── agent.py                Simulated telemetry sender
+│   ├── collector.py            Traffic and metric generator
+│   ├── crypto.py               AES-GCM encryption helper
+│   └── requirements.txt
+├── dashboard/
+│   ├── src/app/page.tsx        VOIDGUARD dashboard
+│   ├── src/app/globals.css
+│   ├── Dockerfile
+│   └── package.json
+├── docker-compose.yml
+├── .env.example
+└── README.md
 ```
 
-## Main Components
+## Services
 
-### Client Agent
-
-The client in `client/agent.py` runs an infinite loop. Every two seconds it:
-
-1. Generates simulated API traffic using `TelemetryCollector`.
-2. Serializes the telemetry to JSON.
-3. Encrypts the JSON with AES-256-GCM using `CryptoModule`.
-4. Sends the encrypted payload to the backend ingest endpoint.
-
-The generated traffic intentionally includes occasional anomalies, such as:
-
-- SQL injection-like endpoint strings
-- malformed auth tokens
-- oversized request bodies
-- suspicious user agents
-- excessive headers
-
-This gives the backend something meaningful to detect during local testing.
-
-### Backend API
-
-The backend is a FastAPI service exposed on port `8080`.
-
-Important routes:
-
-| Route | Method | Purpose |
+| Service | Purpose | URL / Port |
 | --- | --- | --- |
-| `/health` | `GET` | Confirms the backend is online |
-| `/api/v1/auth/login` | `POST` | Returns a JWT for the demo admin user |
-| `/api/v1/ingest/` | `POST` | Accepts encrypted telemetry from agents |
-| `/api/v1/alerts/` | `GET` | Returns recent alerts |
-| `/docs` | `GET` | Interactive OpenAPI documentation |
-
-### Detection Agents
-
-The backend uses several small "agent" classes inside `backend/agents/`.
-
-| Agent | File | Responsibility |
-| --- | --- | --- |
-| SentinelAgent | `sentinel.py` | Base64-decodes, decrypts, parses, and validates telemetry |
-| AnalystAgent | `analyst.py` | Performs rule-based and Isolation Forest anomaly checks |
-| OAuthAgent | `oauth.py` | Checks auth-token presence, shape, and suspicious access behavior |
-| MemoryAgent | `memory.py` | Queries and stores similar attack patterns in ChromaDB |
-| DecisionEngine | `decision.py` | Combines scores and chooses `ALLOW`, `ALERT`, or `BLOCK` |
-| ResponseAgent | `response.py` | Writes alerts, blocks malicious IPs, and publishes alert events |
-
-The final score is weighted like this:
-
-```text
-final_score = analyst_score * 0.5
-            + oauth_score   * 0.3
-            + memory_score  * 0.2
-```
-
-Default action thresholds:
-
-| Score | Action |
-| --- | --- |
-| `< 40` | `ALLOW` |
-| `>= 40` | `ALERT` |
-| `>= 75` | `BLOCK` |
-
-### Data Stores
-
-| Store | Use |
-| --- | --- |
-| PostgreSQL | Persists alert records |
-| Redis | Rate limits agents, stores temporary IP blocklist entries, publishes alert stream events |
-| ChromaDB | Stores and queries previous attack-pattern memory |
-
-### Dashboard
-
-The dashboard is a Next.js app on port `3000`. It currently has project metadata, styling, and production Docker support, but the main page is still a starter screen. The intended next step is to connect it to:
-
-- `/api/v1/auth/login`
-- `/api/v1/alerts/`
-- Redis stream updates, if real-time alert UI is added later
+| dashboard | Next.js security dashboard | http://localhost:3000 |
+| backend | FastAPI backend | http://localhost:8080 |
+| API docs | OpenAPI docs | http://localhost:8080/docs |
+| PostgreSQL | Alert database | localhost:5432 |
+| Redis | Rate limits, blocklist, alert stream | localhost:6380 on host, `redis:6379` inside Compose |
+| ChromaDB | Threat memory vector store | http://localhost:8000 |
+| client | Simulated telemetry sender | Compose service |
 
 ## Requirements
 
+Recommended:
+
 - Docker Compose, or Podman with Docker Compose compatibility
-- Node.js 22+ for local dashboard development
-- Python 3.11+ for local backend/client development
 
-Docker Compose is the easiest way to run the project because it starts PostgreSQL, Redis, ChromaDB, backend, dashboard, and client together.
+Optional local development:
 
-## Quick Start
+- Node.js 22+ for dashboard work
+- Python 3.11 for backend/client work
 
-Create a local environment file:
+Do not install backend requirements into a Python 3.13 environment. The backend pins `scikit-learn==1.4.2`, which is intended for Python 3.11 here. On Kali/Debian with Python 3.13, use Docker Compose for the backend.
+
+## Environment
+
+Create a local env file:
 
 ```bash
 cp .env.example .env
 ```
 
-Start the full stack:
-
-```bash
-docker compose up --build
-```
-
-Open these URLs:
-
-- Dashboard: http://localhost:3000
-- Backend health: http://localhost:8080/health
-- API docs: http://localhost:8080/docs
-- ChromaDB: http://localhost:8000
-
-Stop the stack:
-
-```bash
-docker compose down
-```
-
-Stop the stack and delete stored data volumes:
-
-```bash
-docker compose down -v
-```
-
-## Environment Configuration
-
-The project reads runtime configuration from `.env`.
-
-Important values:
+For local Docker Compose, Redis must use the Compose service name:
 
 ```env
-PROJECT_NAME="VOIDGUARD"
-API_V1_STR="/api/v1"
-
-SECRET_KEY="change-this"
-AES_KEY="64-hex-character-aes-key"
-
-DATABASE_URL="postgresql+asyncpg://postgres:voidguard_pwd@db:5432/voidguard"
-
 REDIS_HOST=redis
 REDIS_PORT=6379
+REDIS_HOST_PORT=6380
 REDIS_PASSWORD=""
+```
 
+ChromaDB should also use the Compose service name:
+
+```env
 CHROMA_HOST=chromadb
 CHROMA_PORT=8000
 ```
 
-`AES_KEY` must be exactly 64 hexadecimal characters because AES-256 requires a 32-byte key.
-
-Generate stronger local secrets:
+Generate stronger secrets for local use:
 
 ```bash
 openssl rand -hex 32
 ```
 
-Use one generated value for `SECRET_KEY` and another generated value for `AES_KEY`.
+Use one generated value for `SECRET_KEY` and another for `AES_KEY`. `AES_KEY` must be exactly 64 hex characters.
 
-## Running Individual Parts
+## Run The Full Project
 
-### Infrastructure Only
-
-Start only PostgreSQL, Redis, and ChromaDB:
+From the project root:
 
 ```bash
-docker compose up db redis chromadb
+docker compose down
+docker compose up --build
 ```
 
-### Backend Locally
-
-Run this from the project root after the infrastructure services are running:
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8080
-```
-
-### Client Locally
-
-Run this from the project root while the backend is running:
-
-```bash
-cd client
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python agent.py
-```
-
-### Dashboard Locally
-
-Run this from the project root:
-
-```bash
-cd dashboard
-npm install
-npm run dev
-```
-
-Then open:
+Wait for the services to become healthy. Then open:
 
 ```text
 http://localhost:3000
 ```
 
-## API Examples
+Login to the dashboard:
 
-Health check:
+```text
+username: admin
+password: admin
+```
+
+The dashboard shows backend health, alert totals, blocked/suspicious counts, average risk, and recent decisions.
+
+## Verify Basic Health
+
+Backend:
 
 ```bash
 curl http://localhost:8080/health
 ```
 
-Login with the demo admin account:
+Expected:
+
+```json
+{"status":"VOIDGUARD Core is online"}
+```
+
+ChromaDB:
+
+```bash
+curl http://localhost:8000/api/v1/heartbeat
+```
+
+Redis from host:
+
+```bash
+redis-cli -p 6380 ping
+```
+
+Client logs:
+
+```bash
+docker compose logs -f client
+```
+
+Expected client output:
+
+```text
+[+] Successfully sent payload
+```
+
+## Test Threat Detection
+
+Run the built-in smoke test while the stack is running:
+
+```bash
+docker compose exec backend python scripts/threat_smoke_test.py
+```
+
+The script sends synthetic malicious telemetry through the real encrypted ingest endpoint. The sample includes:
+
+- SQL-injection-like endpoint text
+- malformed auth token
+- excessive headers
+- oversized body
+- high CPU and memory metrics
+- fresh test IP on every run
+
+Expected output:
+
+```text
+Ingest accepted for manual-threat-test-...
+Detection result:
+{
+  "risk_score": 100.0,
+  "action_taken": "BLOCK",
+  ...
+}
+Threat smoke test passed: sample was detected and blocked.
+```
+
+Refresh the dashboard and click `Reload`. You should see the `BLOCK` event.
+
+## API Usage
+
+Login:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/login \
@@ -273,124 +233,232 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
   -d "username=admin&password=admin"
 ```
 
-Fetch recent alerts by replacing `TOKEN` with the returned access token:
+Fetch alerts:
 
 ```bash
+TOKEN="paste_access_token_here"
+
 curl http://localhost:8080/api/v1/alerts/ \
-  -H "Authorization: Bearer TOKEN"
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-Watch backend logs:
+API docs:
+
+```text
+http://localhost:8080/docs
+```
+
+## How Detection Is Scored
+
+The backend combines three risk scores:
+
+```text
+final_score = analyst_score * 0.5
+            + oauth_score   * 0.3
+            + memory_score  * 0.2
+```
+
+Actions:
+
+| Score | Action |
+| --- | --- |
+| `< 40` | `ALLOW` |
+| `>= 40` | `ALERT` |
+| `>= 75` | `BLOCK` |
+
+On `BLOCK`, VOIDGUARD:
+
+- writes an alert to PostgreSQL
+- adds the IP to Redis for 24 hours
+- publishes an alert payload to a Redis stream
+- stores the pattern in ChromaDB memory
+
+## Useful Commands
+
+Start:
 
 ```bash
-docker compose logs -f backend
+docker compose up --build
 ```
 
-Watch client telemetry sender logs:
+Start in background:
 
 ```bash
-docker compose logs -f client
+docker compose up -d --build
 ```
 
-## Development Checks
-
-Validate Docker Compose:
+Stop:
 
 ```bash
-docker compose config
+docker compose down
 ```
 
-Check Python syntax:
+Stop and delete volumes:
 
 ```bash
-python -m compileall backend client
+docker compose down -v
 ```
 
-Lint the dashboard:
-
-```bash
-cd dashboard
-npm run lint
-```
-
-Build the dashboard:
-
-```bash
-cd dashboard
-npm run build
-```
-
-## Security Notes
-
-This project is currently demo-grade. Before using it outside local development, address these items:
-
-- Replace the hardcoded `admin/admin` demo login.
-- Validate JWTs on protected backend routes, not just bearer-token presence.
-- Restrict CORS to trusted dashboard origins.
-- Rotate `SECRET_KEY` and `AES_KEY`.
-- Add database migrations with Alembic instead of creating tables automatically at startup.
-- Add automated tests for ingest, scoring, auth, and alert retrieval.
-- Avoid exposing database, Redis, and ChromaDB ports publicly in production.
-
-## Current Limitations
-
-- The dashboard is not fully wired into the backend alert API yet.
-- The telemetry collector is simulated, not attached to real application traffic.
-- The Isolation Forest model uses a tiny built-in baseline and is not trained on real data.
-- ChromaDB memory uses simple text payloads and default embedding behavior.
-- There is no user management system yet.
-
-## Troubleshooting
-
-Check running services:
+View service status:
 
 ```bash
 docker compose ps
 ```
 
-Check backend logs:
+View backend logs:
 
 ```bash
-docker compose logs backend
+docker compose logs -f backend
 ```
 
-If the backend is not healthy, confirm infrastructure services are healthy:
+View dashboard logs:
 
 ```bash
-docker compose ps db redis chromadb
+docker compose logs -f dashboard
 ```
 
-If the client reports connection failures, check:
+Rebuild only backend:
 
 ```bash
-curl http://localhost:8080/health
+docker compose build backend
+docker compose up -d backend
 ```
 
-If encrypted telemetry fails to process, confirm the backend and client use the same `AES_KEY`.
-
-If a port is already in use, change the left side of the port mapping in `docker-compose.yml`. Example:
-
-```yaml
-ports:
-  - "8081:8080"
-```
-
-If you want a clean database and vector store:
+Copy updated smoke test into a running backend container without rebuild:
 
 ```bash
-docker compose down -v
+docker compose cp backend/scripts/threat_smoke_test.py backend:/app/scripts/threat_smoke_test.py
+```
+
+## Local Development
+
+Docker Compose is preferred. If you run services locally, use Python 3.11.
+
+Backend:
+
+```bash
+cd backend
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8080
+```
+
+Client:
+
+```bash
+cd client
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python agent.py
+```
+
+Dashboard:
+
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+
+Checks:
+
+```bash
+docker compose config
+python -m py_compile backend/scripts/threat_smoke_test.py
+cd dashboard && npm run lint && npm run build
+```
+
+## Troubleshooting
+
+### Dashboard still shows the default Next.js page
+
+Rebuild/restart the dashboard:
+
+```bash
+docker compose build dashboard
+docker compose up -d dashboard
+```
+
+### Redis port 6379 is already in use
+
+VOIDGUARD publishes Redis on host port `6380` by default:
+
+```env
+REDIS_HOST_PORT=6380
+```
+
+Inside Compose, keep:
+
+```env
+REDIS_HOST=redis
+REDIS_PORT=6379
+```
+
+### Backend tries to connect to Redis Cloud
+
+Your `.env` is wrong for local Compose. Use:
+
+```env
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_PASSWORD=""
+```
+
+Then restart:
+
+```bash
+docker compose down
 docker compose up --build
 ```
 
-## Suggested Next Upgrades
+### Pylance says `chromadb` cannot be resolved
 
-Good next steps for the project:
+That warning is from your editor interpreter, not Docker. Either:
 
-- Build the dashboard alert table and login flow.
-- Add real JWT verification dependencies to protected routes.
-- Add unit tests for each detection agent.
-- Add integration tests for encrypted ingest.
-- Add Alembic migrations.
-- Add a WebSocket or Server-Sent Events endpoint for live dashboard alerts.
-- Replace simulated telemetry with real collector integrations.
+- ignore it when running through Docker, or
+- select a Python 3.11 venv with `backend/requirements.txt` installed.
+
+### `scikit-learn` fails to install
+
+You are probably using Python 3.13. Use Docker Compose, or create a Python 3.11 venv.
+
+### Smoke test says no alert was recorded
+
+First check logs:
+
+```bash
+docker compose logs --tail=120 backend
+```
+
+If the backend says it blocked the test IP, detection worked. Rebuild/copy the latest smoke test script:
+
+```bash
+docker compose build backend
+docker compose up -d backend
+```
+
+## Security Notes
+
+VOIDGUARD is a prototype. Before real deployment:
+
+- replace the demo `admin/admin` credentials
+- add proper user management
+- rotate `SECRET_KEY` and `AES_KEY`
+- restrict CORS to trusted origins
+- add Alembic migrations
+- add automated tests
+- avoid exposing PostgreSQL, Redis, or ChromaDB publicly
+- review the detection rules against real telemetry
+
+## Current Limitations
+
+- The client sends simulated telemetry, not real production traffic.
+- The ML model uses a small built-in baseline.
+- ChromaDB may download its default embedding model on first use.
+- The dashboard polls alerts manually instead of streaming live updates.
+- The project is intended for local demo and development, not production operation.
 

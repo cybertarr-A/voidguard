@@ -1,3 +1,5 @@
+# Use Python 3.11 for this backend. scikit-learn==1.4.2 does not support
+# Python 3.13 cleanly and may try to build from source.
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
 sqlalchemy==2.0.30
@@ -8,6 +10,7 @@ pydantic-settings==2.2.1
 redis==5.0.4
 pyjwt==2.8.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
 cryptography==42.0.7
 chromadb==0.5.0
 scikit-learn==1.4.2

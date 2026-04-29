@@ -18,7 +18,7 @@ class SentinelAgent:
     def process_payload(payload: IngestPayload) -> Optional[TelemetryData]:
         try:
             # 1. Base64 decode
-            encrypted_bytes = base64.b64decode(payload.encrypted_data)
+            encrypted_bytes = base64.b64decode(payload.encrypted_data, validate=True)
             
             # 2. Decrypt with AES-256-GCM
             decrypted_str = decrypt_payload(encrypted_bytes)

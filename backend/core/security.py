@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta, timezone
+from typing import Optional
+
 from passlib.context import CryptContext
 import jwt
+from jwt.exceptions import PyJWTError
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import os
 
@@ -17,7 +20,7 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 # JWT helpers
-def create_access_token(subject: str, expires_delta: timedelta = None) -> str:
+def create_access_token(subject: str, expires_delta: Optional[timedelta] = None) -> str:
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
@@ -27,6 +30,18 @@ def create_access_token(subject: str, expires_delta: timedelta = None) -> str:
     to_encode = {"exp": expire, "sub": str(subject)}
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+def decode_access_token(token: str) -> Optional[str]:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        if not isinstance(payload, dict):
+            return None
+        subject = payload.get("sub")
+        if not subject:
+            return None
+        return str(subject)
+    except PyJWTError:
+        return None
 
 # AES-256 for Agent payload encryption
 # The key must be exactly 32 bytes.

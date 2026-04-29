@@ -1,5 +1,4 @@
 import chromadb
-from chromadb.config import Settings as ChromaSettings
 import sys
 import os
 
@@ -24,4 +23,3 @@ except Exception as e:
 
 def get_chroma_collection():
     return patterns_collection
-

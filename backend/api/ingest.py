@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 import sys
 import os
 
@@ -46,4 +46,3 @@ async def process_telemetry(payload: IngestPayload):
         
     # 2. Pass to DecisionEngine
     await DecisionEngine.process(telemetry, payload.agent_id)
-

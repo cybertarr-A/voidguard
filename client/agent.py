@@ -12,7 +12,7 @@ from collector import TelemetryCollector
 load_dotenv()
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8080/api/v1/ingest/")
 AES_KEY = os.getenv("AES_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-AGENT_ID = os.getenv("AGENT_ID", str(uuid.uuid4()))
+AGENT_ID = os.getenv("AGENT_ID") or str(uuid.uuid4())
 
 def run_agent():
     print(f"[*] Starting VOIDGUARD Client Agent ({AGENT_ID})")
