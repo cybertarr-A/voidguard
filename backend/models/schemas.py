@@ -31,3 +31,28 @@ class AlertResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class ScanRequest(BaseModel):
+    url: str
+    scan_type: str = "PASSIVE"
+    depth: int = 1
+
+class VulnerabilitySchema(BaseModel):
+    id: int
+    scan_id: str
+    vuln_type: str
+    severity: str
+    description: str
+    evidence: Optional[Dict] = None
+    created_at: datetime
+
+class ScanResponse(BaseModel):
+    id: str
+    target_url: str
+    status: str
+    scan_type: str
+    depth: int
+    risk_score: Optional[float] = None
+    ai_explanation: Optional[str] = None
+    vulnerabilities: list[VulnerabilitySchema] = []
+    created_at: datetime

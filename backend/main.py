@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from config import settings
 from core.database import engine, Base
-from api import auth, ingest, alerts
+from api import auth, ingest, alerts, scan, ws
 
 async def init_db():
     async with engine.begin() as conn:
@@ -39,6 +39,8 @@ app.add_middleware(
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(ingest.router, prefix=f"{settings.API_V1_STR}/ingest", tags=["ingestion"])
 app.include_router(alerts.router, prefix=f"{settings.API_V1_STR}/alerts", tags=["alerts"])
+app.include_router(scan.router, prefix=f"{settings.API_V1_STR}/scan", tags=["scanner"])
+app.include_router(ws.router, prefix=f"{settings.API_V1_STR}/ws", tags=["websocket"])
 
 @app.get("/health")
 async def health_check():

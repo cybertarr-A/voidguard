@@ -22,8 +22,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     AES_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
-    ADMIN_USERNAME: str = "admin"
-    ADMIN_PASSWORD: str = "admin"
+    ADMIN_USERNAME: str
+    ADMIN_PASSWORD: str
+    SCANNER_TIMEOUT: int = 30
+    RATE_LIMIT: int = 100
     
     # DB
     DATABASE_URL: str
@@ -36,6 +38,9 @@ class Settings(BaseSettings):
     # ChromaDB
     CHROMA_HOST: str
     CHROMA_PORT: int
+
+    # Groq AI
+    GROQ_API_KEY: str = ""
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
